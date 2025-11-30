@@ -183,14 +183,11 @@
         "Xenopus": { k: "Animalia", p: "Chordata", f: "Pipidae" }, 
         "Drosophila": { k: "Animalia", p: "Arthropoda", f: "Drosophilidae" },
         "Caenorhabditis": { k: "Animalia", p: "Nematoda", f: "Rhabditidae" },
-        "Aquila": { k: "Animalia", p: "Chordata", f: "Accipitridae" }, // Added from file
-        "Spizaetus": { k: "Animalia", p: "Chordata", f: "Accipitridae" }, // Added from file
-        "Labeo": { k: "Animalia", p: "Chordata", f: "Cyprinidae" }, // Added from file
+        "Aquila": { k: "Animalia", p: "Chordata", f: "Accipitridae" },
+        "Spizaetus": { k: "Animalia", p: "Chordata", f: "Accipitridae" },
+        "Labeo": { k: "Animalia", p: "Chordata", f: "Cyprinidae" },
         
         // --- VIRUSES ---
-        "Enterobacteria": { k: "Viruses", p: "Phage", f: "Caudovirales" }, 
-        "Lactococcus": { k: "Viruses", p: "Phage", f: "Caudovirales" }, 
-        "Synechococcus": { k: "Viruses", p: "Phage", f: "Myoviridae" }, 
         "T4": { k: "Viruses", p: "Phage", f: "Myoviridae" },
         "Lambda": { k: "Viruses", p: "Phage", f: "Siphoviridae" },
         "HIV": { k: "Viruses", p: "Retroviridae", f: "Lentivirus" },
@@ -198,8 +195,8 @@
         "Coronavirus": { k: "Viruses", p: "Riboviria", f: "Coronaviridae" },
         "Sars-cov-2": { k: "Viruses", p: "Riboviria", f: "Coronaviridae" },
         "Bacteriophage": { k: "Viruses", p: "Phage", f: "Unclassified" },
-        "Pelagibacter": { k: "Viruses", p: "Phage", f: "Unclassified" }, // Context dependent fix
-        "Methylophilales": { k: "Viruses", p: "Phage", f: "Unclassified" } // Context dependent
+        "Pelagibacter": { k: "Viruses", p: "Phage", f: "Unclassified" }, // Fixed: Pelagibacter itself is bacteria, but Pelagibacter phage is virus. Context aware logic handles this.
+        "Methylophilales": { k: "Viruses", p: "Phage", f: "Unclassified" }
     };
 
     const fallbackRules = [
@@ -276,13 +273,13 @@
 
             // 2. CONTEXT AWARE FIX: 
             // If the header mentions "phage" or "virus", force classification to Virus.
-            // This handles cases like "Synechococcus phage" -> Virus, "Pelagibacter phage" -> Virus.
+            // This handles cases like "Synechococcus phage" -> Virus, while "Synechococcus sp." -> Bacteria.
             const headerLower = fullHeader.toLowerCase();
             const isViral = headerLower.includes("phage") || headerLower.includes("virus");
 
             if (isViral) {
-                // If we found a genus (e.g., Synechococcus) but it's a phage
                 if (tax) {
+                    // It found a bacterial host name (e.g., Synechococcus) but header says phage
                     tax = {
                         k: "Viruses",
                         p: "Phage",
@@ -324,17 +321,15 @@
                     if (!/^\d+$/.test(potentialSpecies) && !potentialSpecies.includes('=') && !isViral) {
                         hierarchy.push(tax.genus + " " + potentialSpecies);
                     } else if (isViral) {
-                        // For viruses, just keep the genus level or add the next token if it looks like an ID
-                        hierarchy.push(tax.genus);
+                        // For viruses, usually just keep the phage name
+                        // hierarchy.push(tax.genus); // Already pushed genus
                     } else {
                          hierarchy.push(tax.genus + " sp.");
                     }
                 } else {
-                    hierarchy.push(tax.genus + (isViral ? "" : " sp."));
+                    if (!isViral) hierarchy.push(tax.genus + " sp.");
                 }
             } else {
-                // If regex matched or unknown
-                // Clean tokens for display
                 const cleanTokens = tokens.filter(t => !/^\d+$/.test(t) && t.length > 3).slice(0, 2);
                 if (cleanTokens.length > 0) {
                     hierarchy.push(cleanTokens.join(" "));
