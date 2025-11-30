@@ -121,6 +121,25 @@
         "Chlamydia": { k: "Bacteria", p: "Chlamydiae", f: "Chlamydiaceae" },
         "Borrelia": { k: "Bacteria", p: "Spirochaetes", f: "Borreliaceae" },
         "Treponema": { k: "Bacteria", p: "Spirochaetes", f: "Spirochaetaceae" },
+        "Lactococcus": { k: "Bacteria", p: "Firmicutes", f: "Streptococcaceae" },
+        "Gloeocapsa": { k: "Bacteria", p: "Cyanobacteria", f: "Chroococcaceae" },
+        "Pleurocapsa": { k: "Bacteria", p: "Cyanobacteria", f: "Pleurocapsaceae" },
+        "Cyanothece": { k: "Bacteria", p: "Cyanobacteria", f: "Chroococcaceae" },
+        "Geminocystis": { k: "Bacteria", p: "Cyanobacteria", f: "Chroococcaceae" },
+        "Stanieria": { k: "Bacteria", p: "Cyanobacteria", f: "Dermocarpellaceae" },
+        "Leptolyngbya": { k: "Bacteria", p: "Cyanobacteria", f: "Leptolyngbyaceae" },
+        "Oscillatoria": { k: "Bacteria", p: "Cyanobacteria", f: "Oscillatoriaceae" },
+        "Microcoleus": { k: "Bacteria", p: "Cyanobacteria", f: "Oscillatoriaceae" },
+        "Phormidium": { k: "Bacteria", p: "Cyanobacteria", f: "Oscillatoriaceae" },
+        "Trichodesmium": { k: "Bacteria", p: "Cyanobacteria", f: "Oscillatoriaceae" },
+        "Limnothrix": { k: "Bacteria", p: "Cyanobacteria", f: "Pseudanabaenaceae" },
+        "Pseudanabaena": { k: "Bacteria", p: "Cyanobacteria", f: "Pseudanabaenaceae" },
+        "Geitlerinema": { k: "Bacteria", p: "Cyanobacteria", f: "Pseudanabaenaceae" },
+        "Synechocystis": { k: "Bacteria", p: "Cyanobacteria", f: "Chroococcaceae" },
+        "Thermosynechococcus": { k: "Bacteria", p: "Cyanobacteria", f: "Synechococcaceae" },
+        "Acaryochloris": { k: "Bacteria", p: "Cyanobacteria", f: "Acaryochloridaceae" },
+        "Arthrospira": { k: "Bacteria", p: "Cyanobacteria", f: "Microcoleaceae" },
+        "Lyngbya": { k: "Bacteria", p: "Cyanobacteria", f: "Oscillatoriaceae" },
 
         // --- ARCHAEA ---
         "Methanocaldococcus": { k: "Archaea", p: "Euryarchaeota", f: "Methanocaldococcaceae" },
@@ -164,6 +183,9 @@
         "Xenopus": { k: "Animalia", p: "Chordata", f: "Pipidae" }, 
         "Drosophila": { k: "Animalia", p: "Arthropoda", f: "Drosophilidae" },
         "Caenorhabditis": { k: "Animalia", p: "Nematoda", f: "Rhabditidae" },
+        "Aquila": { k: "Animalia", p: "Chordata", f: "Accipitridae" }, // Added from file
+        "Spizaetus": { k: "Animalia", p: "Chordata", f: "Accipitridae" }, // Added from file
+        "Labeo": { k: "Animalia", p: "Chordata", f: "Cyprinidae" }, // Added from file
         
         // --- VIRUSES ---
         "Enterobacteria": { k: "Viruses", p: "Phage", f: "Caudovirales" }, 
@@ -174,10 +196,15 @@
         "HIV": { k: "Viruses", p: "Retroviridae", f: "Lentivirus" },
         "Influenza": { k: "Viruses", p: "Orthomyxoviridae", f: "Betainfluenzavirus" },
         "Coronavirus": { k: "Viruses", p: "Riboviria", f: "Coronaviridae" },
-        "Sars-cov-2": { k: "Viruses", p: "Riboviria", f: "Coronaviridae" }
+        "Sars-cov-2": { k: "Viruses", p: "Riboviria", f: "Coronaviridae" },
+        "Bacteriophage": { k: "Viruses", p: "Phage", f: "Unclassified" },
+        "Pelagibacter": { k: "Viruses", p: "Phage", f: "Unclassified" }, // Context dependent fix
+        "Methylophilales": { k: "Viruses", p: "Phage", f: "Unclassified" } // Context dependent
     };
 
     const fallbackRules = [
+        { pattern: /metagenome/i, k: "Environmental", p: "Metagenome", f: "Unclassified" },
+        { pattern: /riboswitch/i, k: "Other", p: "RNA Structure", f: "Riboswitch" },
         { pattern: /mitochondri/i, k: "Eukaryota", p: "Organelle", f: "Mitochondria" },
         { pattern: /chloroplast/i, k: "Plantae", p: "Organelle", f: "Chloroplast" },
         { pattern: /plasmid/i, k: "Bacteria", p: "Plasmid", f: "Unclassified" },
@@ -235,6 +262,7 @@
             let tax = null;
             let foundIndex = -1;
 
+            // 1. Scan for a known Genus in the database
             for (let i = 0; i < tokens.length; i++) {
                 if (tokens[i].match(/subsp|str\.|strain|isolate/i)) continue;
 
@@ -246,6 +274,33 @@
                 }
             }
 
+            // 2. CONTEXT AWARE FIX: 
+            // If the header mentions "phage" or "virus", force classification to Virus.
+            // This handles cases like "Synechococcus phage" -> Virus, "Pelagibacter phage" -> Virus.
+            const headerLower = fullHeader.toLowerCase();
+            const isViral = headerLower.includes("phage") || headerLower.includes("virus");
+
+            if (isViral) {
+                // If we found a genus (e.g., Synechococcus) but it's a phage
+                if (tax) {
+                    tax = {
+                        k: "Viruses",
+                        p: "Phage",
+                        f: "Bacteriophage",
+                        genus: tax.genus + " phage" 
+                    };
+                } else {
+                    // No genus found, but it is a virus/phage
+                    tax = {
+                        k: "Viruses",
+                        p: "Phage",
+                        f: "Bacteriophage",
+                        genus: "Unclassified Phage"
+                    };
+                }
+            }
+
+            // 3. Fallback Regex
             if (!tax) {
                 for (let rule of fallbackRules) {
                     if (rule.pattern.test(fullHeader)) {
@@ -263,17 +318,23 @@
             
             if (tax.genus) {
                 hierarchy.push(tax.genus);
+                // Try to add species detail if we found a genus index
                 if (foundIndex !== -1 && foundIndex + 1 < tokens.length) {
                     const potentialSpecies = tokens[foundIndex + 1];
-                    if (!/^\d+$/.test(potentialSpecies) && !potentialSpecies.includes('=')) {
+                    if (!/^\d+$/.test(potentialSpecies) && !potentialSpecies.includes('=') && !isViral) {
                         hierarchy.push(tax.genus + " " + potentialSpecies);
+                    } else if (isViral) {
+                        // For viruses, just keep the genus level or add the next token if it looks like an ID
+                        hierarchy.push(tax.genus);
                     } else {
                          hierarchy.push(tax.genus + " sp.");
                     }
                 } else {
-                    hierarchy.push(tax.genus + " sp.");
+                    hierarchy.push(tax.genus + (isViral ? "" : " sp."));
                 }
             } else {
+                // If regex matched or unknown
+                // Clean tokens for display
                 const cleanTokens = tokens.filter(t => !/^\d+$/.test(t) && t.length > 3).slice(0, 2);
                 if (cleanTokens.length > 0) {
                     hierarchy.push(cleanTokens.join(" "));
@@ -327,7 +388,6 @@
 
     const Sunburst = ({ data, scale = 100, onNodeClick, highlightedPath, zoomToPath }) => {
         const svgRef = useRef(null);
-        // We use a fixed logical width for the coordinate system to keep text size consistent
         const logicalWidth = 1200;
         const logicalHeight = 1200;
 
@@ -526,12 +586,11 @@
         const [parsedRawData, setParsedRawData] = useState([]);
         const [parsedData, setParsedData] = useState(null);
         const [weightBy, setWeightBy] = useState('count');
-        const [chartSize, setChartSize] = useState(90); // Default 90%
+        const [chartSize, setChartSize] = useState(90); 
         const [isDragging, setIsDragging] = useState(false);
         const [loading, setLoading] = useState(false);
         const [selectedNode, setSelectedNode] = useState(null);
 
-        // Sequence Locator State
         const [querySequence, setQuerySequence] = useState('');
         const [matchResult, setMatchResult] = useState(null);
         const [highlightedPath, setHighlightedPath] = useState(null);
