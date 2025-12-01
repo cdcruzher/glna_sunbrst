@@ -39,7 +39,18 @@
             z-index: 50;
         }
         
-        .chart-label { pointer-events: none; font-size: 10px; fill: #333; text-shadow: 0 1px 0 #fff, 0 -1px 0 #fff, 1px 0 0 #fff, -1px 0 0 #fff; }
+        .chart-label { 
+            pointer-events: none; 
+            /* font-size set dynamically via JS now */
+            font-weight: 600; 
+            fill: #0f172a; 
+            /* Removed text-shadow to eliminate white background/halo */
+            text-shadow: none;
+        }
+
+        .center-icon {
+            transition: opacity 0.3s ease;
+        }
         
         /* Custom scrollbar for table */
         .custom-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -195,7 +206,7 @@
         "Coronavirus": { k: "Viruses", p: "Riboviria", f: "Coronaviridae" },
         "Sars-cov-2": { k: "Viruses", p: "Riboviria", f: "Coronaviridae" },
         "Bacteriophage": { k: "Viruses", p: "Phage", f: "Unclassified" },
-        "Pelagibacter": { k: "Viruses", p: "Phage", f: "Unclassified" }, // Fixed: Pelagibacter itself is bacteria, but Pelagibacter phage is virus. Context aware logic handles this.
+        "Pelagibacter": { k: "Viruses", p: "Phage", f: "Unclassified" }, 
         "Methylophilales": { k: "Viruses", p: "Phage", f: "Unclassified" }
     };
 
@@ -272,14 +283,11 @@
             }
 
             // 2. CONTEXT AWARE FIX: 
-            // If the header mentions "phage" or "virus", force classification to Virus.
-            // This handles cases like "Synechococcus phage" -> Virus, while "Synechococcus sp." -> Bacteria.
             const headerLower = fullHeader.toLowerCase();
             const isViral = headerLower.includes("phage") || headerLower.includes("virus");
 
             if (isViral) {
                 if (tax) {
-                    // It found a bacterial host name (e.g., Synechococcus) but header says phage
                     tax = {
                         k: "Viruses",
                         p: "Phage",
@@ -287,7 +295,6 @@
                         genus: tax.genus + " phage" 
                     };
                 } else {
-                    // No genus found, but it is a virus/phage
                     tax = {
                         k: "Viruses",
                         p: "Phage",
@@ -315,14 +322,12 @@
             
             if (tax.genus) {
                 hierarchy.push(tax.genus);
-                // Try to add species detail if we found a genus index
                 if (foundIndex !== -1 && foundIndex + 1 < tokens.length) {
                     const potentialSpecies = tokens[foundIndex + 1];
                     if (!/^\d+$/.test(potentialSpecies) && !potentialSpecies.includes('=') && !isViral) {
                         hierarchy.push(tax.genus + " " + potentialSpecies);
                     } else if (isViral) {
                         // For viruses, usually just keep the phage name
-                        // hierarchy.push(tax.genus); // Already pushed genus
                     } else {
                          hierarchy.push(tax.genus + " sp.");
                     }
@@ -381,7 +386,7 @@
 
     // --- Visualization ---
 
-    const Sunburst = ({ data, scale = 100, onNodeClick, highlightedPath, zoomToPath }) => {
+    const Sunburst = ({ data, scale = 100, labelSize = 20, onNodeClick, highlightedPath, zoomToPath }) => {
         const svgRef = useRef(null);
         const logicalWidth = 1200;
         const logicalHeight = 1200;
@@ -391,7 +396,7 @@
 
             d3.select(svgRef.current).selectAll("*").remove();
 
-            const radius = logicalWidth / 6;
+            const radius = logicalWidth / 4;
             const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
             
             const hierarchy = d3.hierarchy(data)
@@ -422,8 +427,45 @@
                 .style("fill", "#555")
                 .style("font-weight", "bold");
             
-            centerText.append("tspan").attr("class", "center-name").attr("x", 0).attr("dy", "-0.5em").style("font-size", "18px").text("Life");
-            centerText.append("tspan").attr("class", "center-val").attr("x", 0).attr("dy", "1.4em").style("font-size", "14px").style("fill", "#888").text("");
+            // Name
+            centerText.append("tspan")
+                .attr("class", "center-name")
+                .attr("x", 0)
+                .attr("dy", "-0.3em") 
+                .style("font-size", "72px") 
+                .style("font-weight", "800")
+                .text("Life");
+            
+            // Icon Group
+            const iconGroup = centerGroup.append("g")
+                .attr("class", "center-icon")
+                .attr("transform", "translate(-50, -10) scale(4.5)")
+                .style("opacity", 1); // Initial state
+
+            const iconSvg = iconGroup.append("svg")
+                .attr("width", 24)
+                .attr("height", 24)
+                .attr("viewBox", "0 0 24 24")
+                .attr("fill", "none")
+                .attr("stroke", "#334155")
+                .attr("stroke-width", "2")
+                .attr("stroke-linecap", "round")
+                .attr("stroke-linejoin", "round");
+
+            // DNA Helix Path
+            iconSvg.append("path").attr("d", "M2 15c6.667-6 13.333 0 20-6");
+            iconSvg.append("path").attr("d", "M9 22c1.798-1.998 2.518-3.995 2.807-5.993");
+            iconSvg.append("path").attr("d", "M15 2c-1.798 1.998-2.518 3.995-2.807 5.993");
+            iconSvg.append("path").attr("d", "M17 12c-5.667 4-11.333-2-17 4");
+
+            // Value
+            centerText.append("tspan")
+                .attr("class", "center-val")
+                .attr("x", 0)
+                .attr("dy", "2.5em")
+                .style("font-size", "24px")
+                .style("fill", "#888")
+                .text("");
 
             let focus = root;
 
@@ -450,6 +492,8 @@
                     }
                     return d.children ? 0.8 : 0.6;
                 })
+                .attr("stroke", "white")
+                .attr("stroke-width", d => (d.x1 - d.x0) < 0.01 ? "0px" : "1px")
                 .attr("pointer-events", d => arcVisible(d.current) ? "auto" : "none")
                 .attr("d", d => arc(d.current));
 
@@ -468,10 +512,10 @@
                 .data(root.descendants().slice(1))
                 .join("text")
                 .attr("dy", "0.35em")
-                .attr("fill-opacity", d => +labelVisible(d.current))
+                .attr("fill-opacity", d => +labelVisible(d, d.current))
                 .attr("transform", d => labelTransform(d.current))
                 .attr("class", "chart-label")
-                .style("font-size", "11px")
+                .style("font-size", `${labelSize}px`)
                 .text(d => d.data.name);
 
             path.on("mouseover", function(event, d) {
@@ -481,15 +525,24 @@
                     path.filter(node => sequence.indexOf(node) >= 0)
                         .style("opacity", 1).style("stroke", "#000").style("stroke-width", "1px");
                 }
-                d3.select(".center-name").text(d.data.name);
+                d3.select(".center-name").text(d.data.name).style("font-size", "40px");
+                d3.select(".center-icon").style("opacity", 0);
                 d3.select(".center-val").text(d.value.toLocaleString());
             })
             .on("mouseout", function() {
                 if (!highlightedPath) {
-                    path.style("opacity", 1).style("stroke", "none");
+                    path.style("opacity", 1).style("stroke", "white").style("stroke-width", d => (d.x1 - d.x0) < 0.01 ? "0px" : "1px");
                 }
-                d3.select(".center-name").text(focus.data.name);
-                d3.select(".center-val").text("");
+                
+                if(focus.depth === 0) {
+                     d3.select(".center-name").text("Life").style("font-size", "72px");
+                     d3.select(".center-icon").style("opacity", 1);
+                     d3.select(".center-val").text("");
+                } else {
+                     d3.select(".center-name").text(focus.data.name).style("font-size", "40px");
+                     d3.select(".center-icon").style("opacity", 0);
+                     d3.select(".center-val").text("");
+                }
             });
 
             const parent = svg.append("circle")
@@ -505,8 +558,16 @@
                 }
 
                 focus = p;
-                d3.select(".center-name").text(p.data.name);
-                d3.select(".center-val").text("");
+                
+                if(focus.depth === 0) {
+                     d3.select(".center-name").text("Life").style("font-size", "72px");
+                     d3.select(".center-icon").style("opacity", 1);
+                     d3.select(".center-val").text("");
+                } else {
+                     d3.select(".center-name").text(p.data.name).style("font-size", "40px");
+                     d3.select(".center-icon").style("opacity", 0);
+                     d3.select(".center-val").text("");
+                }
 
                 parent.datum(p.parent || root);
 
@@ -533,14 +594,15 @@
                         if (highlightedPath && !isHighlighted(d)) return d.children ? 0.4 : 0.2;
                         return d.children ? 0.8 : 0.6;
                     })
+                    .attr("stroke-width", d => (d.target.x1 - d.target.x0) < 0.01 ? "0px" : "1px")
                     .attr("class", d => isHighlighted(d) ? "highlighted-arc" : "")
                     .attr("pointer-events", d => arcVisible(d.target) ? "auto" : "none")
                     .attrTween("d", d => () => arc(d.current));
 
                 label.filter(function(d) {
-                    return +this.getAttribute("fill-opacity") || labelVisible(d.target);
+                    return +this.getAttribute("fill-opacity") || labelVisible(d, d.target);
                 }).transition(t)
-                    .attr("fill-opacity", d => +labelVisible(d.target))
+                    .attr("fill-opacity", d => +labelVisible(d, d.target))
                     .attrTween("transform", d => () => labelTransform(d.current));
             }
 
@@ -556,15 +618,25 @@
                 }
             }
 
-            function arcVisible(d) { return d.y1 <= 3 && d.y0 >= 1 && d.x1 > d.x0; }
-            function labelVisible(d) { return d.y1 <= 3 && d.y0 >= 1 && (d.y1 - d.y0) * (d.x1 - d.x0) > 0.03; }
+            function arcVisible(d) { 
+                return d.y1 <= 2 && d.y0 >= 1 && d.x1 > d.x0; 
+            }
+            
+            function labelVisible(d, rect) {
+                rect = rect || d;
+                
+                if ((rect.x1 - rect.x0) < 0.05) return false;
+                
+                return rect.y1 <= 2 && rect.y0 >= 1;
+            }
+            
             function labelTransform(d) {
                 const x = (d.x0 + d.x1) / 2 * 180 / Math.PI;
                 const y = (d.y0 + d.y1) / 2 * radius;
                 return `rotate(${x - 90}) translate(${y},0) rotate(${x < 180 ? 0 : 180})`;
             }
 
-        }, [data, highlightedPath, zoomToPath]);
+        }, [data, highlightedPath, zoomToPath, labelSize]);
 
         return (
             <div className="relative flex justify-center items-center" style={{ width: '100%', height: '100%', overflow: 'auto' }}>
@@ -582,6 +654,7 @@
         const [parsedData, setParsedData] = useState(null);
         const [weightBy, setWeightBy] = useState('count');
         const [chartSize, setChartSize] = useState(90); 
+        const [labelSize, setLabelSize] = useState(20); // Default 20px
         const [isDragging, setIsDragging] = useState(false);
         const [loading, setLoading] = useState(false);
         const [selectedNode, setSelectedNode] = useState(null);
@@ -832,6 +905,7 @@ GGGGGGGGGGGGGGGGGGGGGGGG`;
                                 </div>
                             </div>
                             
+                            {/* Chart Size Slider */}
                             <div>
                                 <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Chart Size</label>
                                 <div className="flex items-center gap-3">
@@ -842,6 +916,20 @@ GGGGGGGGGGGGGGGGGGGGGGGG`;
                                         className="w-full accent-indigo-600"
                                     />
                                     <span className="text-sm font-bold w-8 text-right">{chartSize}%</span>
+                                </div>
+                            </div>
+
+                            {/* Label Size Slider */}
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Label Font Size</label>
+                                <div className="flex items-center gap-3">
+                                    <input 
+                                        type="range" min="6" max="24" step="1"
+                                        value={labelSize} 
+                                        onChange={(e) => setLabelSize(Number(e.target.value))}
+                                        className="w-full accent-indigo-600"
+                                    />
+                                    <span className="text-sm font-bold w-8 text-right">{labelSize}px</span>
                                 </div>
                             </div>
                         </div>
@@ -871,6 +959,7 @@ GGGGGGGGGGGGGGGGGGGGGGGG`;
                             <Sunburst 
                                 data={parsedData} 
                                 scale={chartSize}
+                                labelSize={labelSize}
                                 onNodeClick={handleNodeClick} 
                                 highlightedPath={highlightedPath} 
                                 zoomToPath={zoomToPath}
